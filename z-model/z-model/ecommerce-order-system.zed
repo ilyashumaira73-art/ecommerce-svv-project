@@ -1,0 +1,83 @@
+[ORDER, ITEM, CUSTOMER]
+
+OrderState ::= Pending | Shipped | Delivered | Cancelled
+PaymentState ::= Paid | Unpaid
+
+\begin{schema}{OrderSystem}
+  orders        : __\pow__ __ORDER__
+  inventory     : ITEM \pfun \nat
+  orderStatus   : ORDER \pfun OrderState
+  paymentStatus : ORDER \pfun PaymentState
+  customers     : ORDER \pfun CUSTOMER
+\where
+  \dom orderStatus = orders
+  \dom paymentStatus = orders
+  \dom customers = orders
+\end{schema}
+
+\begin{schema}{Inv1_StockNonNegative}
+  OrderSystem
+\where
+  \forall i : ITEM | i \in \dom inventory @
+    inventory(i) \geq 0
+\end{schema}
+
+\begin{schema}{Inv2_NoDeliveredCancel}
+  OrderSystem
+\where
+  \forall o : orders @
+    orderStatus(o) = Delivered \implies
+    orderStatus(o) \neq Cancelled
+\end{schema}
+
+\begin{schema}{Inv3_UniqueOrders}
+  OrderSystem
+\where
+  \forall o1, o2 : orders | o1 \neq o2 @ o1 \neq o2
+\end{schema}
+
+\begin{schema}{PlaceOrder}
+  \Delta OrderSystem
+  newOrder?  : __ORDER__
+  item?      : ITEM
+  customer?  : CUSTOMER
+\where
+  newOrder? \notin orders
+  item? \in \dom inventory
+  inventory(item?) > 0
+  orders' = orders \cup \{newOrder?\}
+  inventory' = inventory \oplus
+               \{item? \mapsto inventory(item?) - 1\}
+  orderStatus' = orderStatus \oplus
+                 \{newOrder? \mapsto Pending\}
+  paymentStatus' = paymentStatus \oplus
+                   \{newOrder? \mapsto Unpaid\}
+\end{schema}
+
+\begin{schema}{CancelOrder}
+  \Delta OrderSystem
+  order? : ORDER
+\where
+  order? \in orders
+  orderStatus(order?) = Pending
+  orderStatus' = orderStatus \oplus
+                 \{order? \mapsto Cancelled\}
+  orders' = orders
+  inventory' = inventory
+  paymentStatus' = paymentStatus
+\end{schema}
+
+\begin{schema}{UpdateStatus}
+  \Delta OrderSystem
+  order?     : __ORDER__
+  newStatus? : OrderState
+\where
+  order? \in orders
+  ( __orderStatus(order?) = Pending \land newStatus? = Shipped__ ) \lor
+  ( __orderStatus(order?) = Shipped \land newStatus? = Delivered__ )
+  orderStatus' = orderStatus \oplus
+                 \{order? \mapsto newStatus?\}
+  orders' = orders
+  inventory' = inventory
+  paymentStatus' = paymentStatus
+\end{schema}
