@@ -1,0 +1,176 @@
+-- ============================================================
+-- E-Commerce Order Management System
+-- VDM++ Specification
+-- Member 3 - SVV Lab Semester Project
+-- ============================================================
+
+class ECommerceSystem
+
+types
+  -- Order status type
+  OrderStatus = <Pending> | <Shipped> | <Delivered> | <Cancelled>;
+
+  -- Unique identifiers
+  OrderId  = nat1;
+  ProductId = nat1;
+  CustomerId = nat1;
+
+  -- Product record
+  Product :: productId : ProductId
+             name      : seq of char
+             price     : real
+             stock     : nat;
+
+  -- Order record
+  Order :: orderId    : OrderId
+           customerId : CustomerId
+           productId  : ProductId
+           quantity   : nat1
+           status     : OrderStatus;
+
+instance variables
+  -- System state: collections of products and orders
+  products : map ProductId to Product := {|->};
+  orders   : map OrderId  to Order   := {|->};
+
+  -- Auto-increment counters
+  nextOrderId   : OrderId   := 1;
+  nextProductId : ProductId := 1;
+
+-- ============================================================
+-- INVARIANTS
+-- ============================================================
+
+  -- INV-1: Stock can never be negative (guaranteed by nat type,
+  --        but we also ensure orders never over-commit stock)
+  inv forall pid in set dom products &
+        products(pid).stock >= 0;
+
+  -- INV-2: Delivered orders can never be in Cancelled status
+  --        (once delivered, order lifecycle is complete)
+  inv forall oid in set dom orders &
+        not (orders(oid).status = <Delivered> and
+             orders(oid).status = <Cancelled>);
+
+  -- INV-3: Every order references a valid product
+  inv forall oid in set dom orders &
+        orders(oid).productId in set dom products;
+
+-- ============================================================
+-- OPERATIONS
+-- ============================================================
+
+-- ------------------------------------------------------------
+-- addProduct: Register a new product in the catalogue
+-- ------------------------------------------------------------
+operations
+  public addProduct(name : seq of char, price : real, stock : nat)
+    r : ProductId
+  ext wr products    : map ProductId to Product
+      wr nextProductId : ProductId
+  pre price > 0 and stock >= 0 and len name > 0
+  post let pid = nextProductId~ in
+         products = products~ ++ {pid |->
+           mk_Product(pid, name, price, stock)} and
+         nextProductId = nextProductId~ + 1 and
+         r = pid;
+
+-- ------------------------------------------------------------
+-- placeOrder: Customer places an order for a product
+--
+--   PRE-CONDITION  : Product exists AND stock > 0
+--                    AND requested quantity <= available stock
+--   POST-CONDITION : Stock decreases by quantity ordered
+--                    AND a new Order with status <Pending> is created
+-- ------------------------------------------------------------
+  public placeOrder(cid : CustomerId, pid : ProductId, qty : nat1)
+    r : OrderId
+  ext wr products : map ProductId to Product
+      wr orders   : map OrderId  to Order
+      wr nextOrderId : OrderId
+  pre pid in set dom products and
+      products(pid).stock >= qty        -- enough stock available
+  post -- Stock has decreased by the ordered quantity
+       let p = products~(pid) in
+         products = products~ ++
+           {pid |-> mk_Product(p.productId, p.name, p.price,
+                               p.stock - qty)} and
+       -- A new Pending order is recorded
+       let oid = nextOrderId~ in
+         orders = orders~ ++
+           {oid |-> mk_Order(oid, cid, pid, qty, <Pending>)} and
+         nextOrderId = nextOrderId~ + 1 and
+         r = nextOrderId~ - 1 and
+       -- Stock never goes negative
+       products(pid).stock >= 0;
+
+-- ------------------------------------------------------------
+-- cancelOrder: Cancel a pending order and restock the item
+--
+--   PRE-CONDITION  : Order exists AND status = <Pending>
+--   POST-CONDITION : status = <Cancelled>
+--                    AND stock is restored by the ordered quantity
+-- ------------------------------------------------------------
+  public cancelOrder(oid : OrderId)
+  ext wr orders   : map OrderId  to Order
+      wr products : map ProductId to Product
+  pre oid in set dom orders and
+      orders(oid).status = <Pending>    -- only pending orders can be cancelled
+  post let o   = orders~(oid) in
+       let p   = products~(o.productId) in
+         -- Order status flips to Cancelled
+         orders = orders~ ++
+           {oid |-> mk_Order(o.orderId, o.customerId, o.productId,
+                             o.quantity, <Cancelled>)} and
+         -- Stock is restored
+         products = products~ ++
+           {o.productId |-> mk_Product(p.productId, p.name, p.price,
+                                       p.stock + o.quantity)};
+
+-- ------------------------------------------------------------
+-- shipOrder: Move a pending order to shipped state
+--
+--   PRE-CONDITION  : Order exists AND status = <Pending>
+--   POST-CONDITION : status = <Shipped>
+-- ------------------------------------------------------------
+  public shipOrder(oid : OrderId)
+  ext wr orders : map OrderId to Order
+  pre oid in set dom orders and
+      orders(oid).status = <Pending>
+  post let o = orders~(oid) in
+         orders = orders~ ++
+           {oid |-> mk_Order(o.orderId, o.customerId, o.productId,
+                             o.quantity, <Shipped>)};
+
+-- ------------------------------------------------------------
+-- deliverOrder: Mark a shipped order as delivered
+--
+--   PRE-CONDITION  : Order exists AND status = <Shipped>
+--   POST-CONDITION : status = <Delivered>
+-- ------------------------------------------------------------
+  public deliverOrder(oid : OrderId)
+  ext wr orders : map OrderId to Order
+  pre oid in set dom orders and
+      orders(oid).status = <Shipped>
+  post let o = orders~(oid) in
+         orders = orders~ ++
+           {oid |-> mk_Order(o.orderId, o.customerId, o.productId,
+                             o.quantity, <Delivered>)};
+
+-- ------------------------------------------------------------
+-- getStock: Query available stock for a product (pure function)
+-- ------------------------------------------------------------
+  public getStock(pid : ProductId) r : nat
+  ext rd products : map ProductId to Product
+  pre pid in set dom products
+  post r = products(pid).stock;
+
+-- ------------------------------------------------------------
+-- getOrderStatus: Query current status of an order (pure function)
+-- ------------------------------------------------------------
+  public getOrderStatus(oid : OrderId) r : OrderStatus
+  ext rd orders : map OrderId to Order
+  pre oid in set dom orders
+  post r = orders(oid).status;
+
+end ECommerceSystem
