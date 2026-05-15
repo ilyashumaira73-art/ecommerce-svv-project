@@ -1,0 +1,69 @@
+class Ecommerce
+
+types
+
+OrderStatus =
+    <Pending>
+  | <Shipped>
+  | <Delivered>
+  | <Cancelled>;
+
+instance variables
+
+stock : nat := 10;
+status : OrderStatus := <Pending>;
+
+-- SYSTEM INVARIANT 
+inv stock >= 0;
+
+operations
+
+-- 1. PLACE ORDER
+placeOrder: () ==> ()
+placeOrder() ==
+(
+  stock := stock - 1
+)
+pre stock > 0
+post stock = stock~ - 1;
+
+
+-- 2. CANCEL ORDER
+cancelOrder: () ==> ()
+cancelOrder() ==
+(
+  status := <Cancelled>
+)
+pre status = <Pending>
+post status = <Cancelled>;
+
+
+-- 3. SHIP ORDER
+shipOrder: () ==> ()
+shipOrder() ==
+(
+  status := <Shipped>
+)
+pre status = <Pending>
+post status = <Shipped>;
+
+
+-- 4. DELIVER ORDER
+deliverOrder: () ==> ()
+deliverOrder() ==
+(
+  status := <Delivered>
+)
+pre status = <Shipped>
+post status = <Delivered>;
+
+
+-- OPTIONAL: VIEW STATUS
+getStatus: () ==> OrderStatus
+getStatus() ==
+(
+  return status
+)
+post RESULT = status;
+
+end Ecommerce
